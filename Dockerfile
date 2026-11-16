@@ -1,22 +1,16 @@
-FROM node:20-bookworm
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Prevent puppeteer from downloading its own chrome during npm install
-ENV PUPPETEER_SKIP_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV NODE_ENV=production
+ENV BAILEYS_AUTH_PATH=/app/auth
 
-# Install chromium and fonts for puppeteer
-RUN apt-get update && \
-    apt-get install -y chromium fonts-freefont-ttf && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install dependencies
 COPY package*.json ./
-RUN npm install
+RUN npm ci --omit=dev
 
-# Copy rest of the project
 COPY . .
+
+VOLUME ["/app/auth"]
 
 EXPOSE 5000
 

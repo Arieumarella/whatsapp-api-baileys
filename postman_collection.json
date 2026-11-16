@@ -1,21 +1,26 @@
 {
   "info": {
-    "name": "WhatsApp API Simple",
-    "_postman_id": "whatsapp-api-simple-collection",
-    "description": "Postman collection untuk WhatsApp API sederhana",
+    "name": "WhatsApp API (Baileys)",
+    "_postman_id": "whatsapp-api-baileys-collection",
+    "description": "Postman collection untuk WhatsApp API berbasis Baileys",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
+    {
+      "name": "GET /health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] },
+        "description": "Health check"
+      }
+    },
     {
       "name": "GET /status",
       "request": {
         "method": "GET",
         "header": [],
-        "url": {
-          "raw": "{{baseUrl}}/status",
-          "host": ["{{baseUrl}}"],
-          "path": ["status"]
-        },
+        "url": { "raw": "{{baseUrl}}/status", "host": ["{{baseUrl}}"], "path": ["status"] },
         "description": "Cek apakah WhatsApp client sudah siap"
       }
     },
@@ -24,11 +29,7 @@
       "request": {
         "method": "GET",
         "header": [],
-        "url": {
-          "raw": "{{baseUrl}}/qr",
-          "host": ["{{baseUrl}}"],
-          "path": ["qr"]
-        },
+        "url": { "raw": "{{baseUrl}}/qr", "host": ["{{baseUrl}}"], "path": ["qr"] },
         "description": "Ambil QR (data URL) untuk discan jika belum terautentikasi"
       }
     },
@@ -36,59 +37,16 @@
       "name": "POST /send",
       "request": {
         "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"number\": \"628123456789\",\n  \"message\": \"Halo dari API\"\n}",
           "options": { "raw": { "language": "json" } }
         },
-        "url": {
-          "raw": "{{baseUrl}}/send",
-          "host": ["{{baseUrl}}"],
-          "path": ["send"]
-        },
-        "description": "Kirim pesan ke nomor (format internasional tanpa +)"
+        "url": { "raw": "{{baseUrl}}/send", "host": ["{{baseUrl}}"], "path": ["send"] },
+        "description": "Kirim pesan teks (format internasional tanpa + atau diawali 0)"
       }
     },
-    {
-      "name": "POST /session/restore",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"session\": { /* paste session object here */ }\n}",
-          "options": { "raw": { "language": "json" } }
-        },
-        "url": {
-          "raw": "{{baseUrl}}/session/restore",
-          "host": ["{{baseUrl}}"],
-          "path": ["session","restore"]
-        },
-        "description": "Restore session object; server menyimpan ke session.json dan reinitialize client"
-      }
-    },
-    {
-      "name": "POST /client/restart",
-      "request": {
-        "method": "POST",
-        "header": [],
-        "url": {
-          "raw": "{{baseUrl}}/client/restart",
-          "host": ["{{baseUrl}}"],
-          "path": ["client","restart"]
-        },
-        "description": "Hancurkan client lama lalu buat client baru (tanpa session)"
-      }
-    }
-    ,
     {
       "name": "POST /send-file (multipart)",
       "request": {
@@ -102,20 +60,44 @@
             { "key": "caption", "value": "Dokumen PDF", "type": "text" }
           ]
         },
-        "url": {
-          "raw": "{{baseUrl}}/send-file",
-          "host": ["{{baseUrl}}"],
-          "path": ["send-file"]
+        "url": { "raw": "{{baseUrl}}/send-file", "host": ["{{baseUrl}}"], "path": ["send-file"] },
+        "description": "Kirim file via multipart form upload (field 'file')"
+      }
+    },
+    {
+      "name": "POST /send-file (JSON fileUrl)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"number\": \"628123456789\",\n  \"fileUrl\": \"https://example.com/doc.pdf\",\n  \"caption\": \"Dokumen\"\n}",
+          "options": { "raw": { "language": "json" } }
         },
-        "description": "Kirim PDF via multipart form upload (field 'file')"
+        "url": { "raw": "{{baseUrl}}/send-file", "host": ["{{baseUrl}}"], "path": ["send-file"] },
+        "description": "Kirim file via URL"
+      }
+    },
+    {
+      "name": "POST /logout",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/logout", "host": ["{{baseUrl}}"], "path": ["logout"] },
+        "description": "Logout dari WhatsApp"
+      }
+    },
+    {
+      "name": "POST /client/restart",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/client/restart", "host": ["{{baseUrl}}"], "path": ["client", "restart"] },
+        "description": "Logout lalu inisialisasi ulang socket"
       }
     }
   ],
   "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:3000",
-      "type": "string"
-    }
+    { "key": "baseUrl", "value": "http://localhost:5000", "type": "string" }
   ]
 }

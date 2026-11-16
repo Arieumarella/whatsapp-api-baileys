@@ -1,6 +1,9 @@
 node_modules/
+# Baileys session credentials - JANGAN commit
+auth/
+# Artefak lama whatsapp-web.js
 session/
 .wwebjs_cache/
-/*.log
 session.json
+/*.log
 .env

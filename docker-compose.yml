@@ -1,34 +1,38 @@
 services:
   whatsapp-api:
-    build:
-      context: .
+    build: .
+    image: whatsapp-api-baileys:latest
     container_name: whatsapp-api
+    restart: unless-stopped
     ports:
       - "5000:5000"
-
-    volumes:
-      # Sync source code
-      - ./:/app
-
-      # Prevent override node_modules dari host
-      - /app/node_modules
-
-    # Load konfigurasi environment
     env_file:
       - ./.env
-
     environment:
       - IN_DOCKER=true
-
-    cap_add:
-      - SYS_ADMIN
-
-    shm_size: '1gb'
-
-    restart: unless-stopped
-    command: node server.js
+      - BAILEYS_AUTH_PATH=/app/auth
+      - LOG_LEVEL=info
+    volumes:
+      - whatsapp_auth:/app/auth
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - pos_network
+
+volumes:
+  whatsapp_auth:
 
 networks:
   pos_network:
