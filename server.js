@@ -6,6 +6,7 @@ const multer = require('multer');
 const qrcode = require('qrcode');
 const pino = require('pino');
 const fs = require('node:fs/promises');
+const path = require('node:path');
 const jwt = require('jsonwebtoken');
 const {
     makeWASocket,
@@ -235,18 +236,30 @@ async function resetSession() {
         qrBase64 = null;
 
         const authPath = process.env.BAILEYS_AUTH_PATH || './auth';
+        // Hapus ISI folder auth (bukan foldernya). Folder /app/auth adalah mount
+        // point volume Docker sehingga tidak bisa di-rmdir (EBUSY).
         try {
-            await fs.rm(authPath, { recursive: true, force: true });
-            logger.info({ authPath }, 'Sesi lama dihapus');
+            const entries = await fs.readdir(authPath);
+            await Promise.all(
+                entries.map((name) => fs.rm(path.join(authPath, name), { recursive: true, force: true }))
+            );
+            logger.info({ authPath, removed: entries.length }, 'Sesi lama dihapus');
         } catch (e) {
-            logger.warn({ err: e, authPath }, 'Gagal menghapus folder auth');
+            if (e && e.code === 'ENOENT') {
+                logger.info({ authPath }, 'Folder auth belum ada, lanjut');
+            } else {
+                logger.error({ err: e, authPath }, 'Gagal menghapus isi folder auth');
+                const err = new Error('Gagal menghapus sesi lama: ' + (e && e.message ? e.message : e));
+                err.code = 'AUTH_CLEAR_FAILED';
+                throw err;
+            }
         }
 
         await sleep(500);
         suppressReconnect = false;
 
         await createSocket();
-        const qr = await waitForQr(20000);
+        const qr = await waitForQr(30000);
         return qr;
     } finally {
         isResetting = false;
@@ -263,6 +276,9 @@ app.post('/session/reset', verifyAppAuth, async (req, res) => {
         }
         if (err && err.message === 'QR timeout') {
             return res.status(504).json({ status: false, error: 'QR timeout, coba lagi' });
+        }
+        if (err && err.code === 'AUTH_CLEAR_FAILED') {
+            return res.status(500).json({ status: false, error: err.message });
         }
         logger.error({ err }, 'Reset session error');
         return res.status(500).json({ status: false, error: err.message });
