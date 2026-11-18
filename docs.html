@@ -41,8 +41,9 @@
         <tr><td>GET</td><td>/qr</td><td>Ambil QR (data URL PNG). Kalau sudah terhubung: <code>{ "status": true, "qr": null, "message": "Already connected" }</code>.</td></tr>
         <tr><td>POST</td><td>/send</td><td>Kirim teks. Body: <code>{ "number": "62812...", "message": "..." }</code>.</td></tr>
         <tr><td>POST</td><td>/send-file</td><td>Kirim file. Multipart (<code>file</code>, <code>number</code>, <code>caption</code>), atau JSON <code>fileBase64</code>/<code>fileUrl</code>. Mendukung PDF, gambar, video, dokumen.</td></tr>
-        <tr><td>POST</td><td>/logout</td><td>Logout dari WhatsApp (hapus sesi aktif).</td></tr>
-        <tr><td>POST</td><td>/client/restart</td><td>Logout lalu inisialisasi ulang socket.</td></tr>
+        <tr><td>POST</td><td>/session/reset</td><td>Paksa sesi baru: logout + hapus sesi lama, lalu generate QR baru (hanya 1 sesi). Butuh JWT.</td></tr>
+        <tr><td>POST</td><td>/logout</td><td>Logout dari WhatsApp (hapus sesi aktif). Butuh JWT.</td></tr>
+        <tr><td>POST</td><td>/client/restart</td><td>Logout lalu inisialisasi ulang socket. Butuh JWT.</td></tr>
       </tbody>
     </table>
   </section>
@@ -75,6 +76,11 @@ Invoke-RestMethod -Uri http://localhost:5000/send -Method Post -Body $body -Cont
     <pre><code>curl -X POST http://localhost:5000/send-file \
   -H "Content-Type: application/json" \
   -d '{"number":"628123456789","fileUrl":"https://example.com/doc.pdf","caption":"Dokumen"}'</code></pre>
+
+    <h3>6) Buat sesi baru / ganti nomor (reset)</h3>
+    <p>Logout &amp; hapus sesi lama, lalu generate QR baru. Butuh token login app.</p>
+    <pre><code>curl -X POST http://localhost:5000/session/reset \
+  -H "Authorization: Bearer &lt;JWT_LOGIN_APP&gt;"</code></pre>
   </section>
 
   <section class="section">

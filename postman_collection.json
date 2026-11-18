@@ -2,7 +2,7 @@
   "info": {
     "name": "WhatsApp API (Baileys)",
     "_postman_id": "whatsapp-api-baileys-collection",
-    "description": "Postman collection untuk WhatsApp API berbasis Baileys",
+    "description": "Postman collection untuk WhatsApp API berbasis Baileys. Endpoint sensitif butuh Bearer JWT (variabel {{token}}).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -79,25 +79,35 @@
       }
     },
     {
+      "name": "POST /session/reset",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{baseUrl}}/session/reset", "host": ["{{baseUrl}}"], "path": ["session", "reset"] },
+        "description": "Paksa sesi baru: logout + hapus sesi lama, lalu generate QR baru. Butuh JWT login app."
+      }
+    },
+    {
       "name": "POST /logout",
       "request": {
         "method": "POST",
-        "header": [],
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
         "url": { "raw": "{{baseUrl}}/logout", "host": ["{{baseUrl}}"], "path": ["logout"] },
-        "description": "Logout dari WhatsApp"
+        "description": "Logout dari WhatsApp (butuh JWT)"
       }
     },
     {
       "name": "POST /client/restart",
       "request": {
         "method": "POST",
-        "header": [],
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
         "url": { "raw": "{{baseUrl}}/client/restart", "host": ["{{baseUrl}}"], "path": ["client", "restart"] },
-        "description": "Logout lalu inisialisasi ulang socket"
+        "description": "Logout lalu inisialisasi ulang socket (butuh JWT)"
       }
     }
   ],
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:5000", "type": "string" }
+    { "key": "baseUrl", "value": "http://localhost:5000", "type": "string" },
+    { "key": "token", "value": "<JWT_LOGIN_APP>", "type": "string" }
   ]
 }

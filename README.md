@@ -43,8 +43,12 @@ Penyebab aplikasi ngelag sebelumnya adalah Chromium. Di versi ini Chromium **tid
 | GET | `/qr` | QR login (data URL) saat belum terhubung |
 | POST | `/send` | Kirim pesan teks |
 | POST | `/send-file` | Kirim file (PDF/gambar/video/dokumen) |
-| POST | `/logout` | Logout & hapus sesi |
-| POST | `/client/restart` | Logout lalu inisialisasi ulang |
+| POST | `/session/reset` | **Paksa sesi baru**: logout + hapus sesi lama, lalu generate QR baru. Butuh JWT login. |
+| POST | `/logout` | Logout & hapus sesi. Butuh JWT login. |
+| POST | `/client/restart` | Logout lalu inisialisasi ulang. Butuh JWT login. |
+
+> `/session/reset`, `/logout`, dan `/client/restart` **diproteksi**: wajib header
+> `Authorization: Bearer <JWT>` dari login aplikasi POS (lihat bagian Keamanan).
 
 **Format nomor telepon** fleksibel, otomatis dinormalisasi ke `62...`:
 `0895...`, `+62895...`, atau `62895...`.
@@ -107,6 +111,18 @@ Respons:
 ```json
 { "ok": true, "id": "3EB0..." }
 ```
+
+### Buat sesi baru / ganti nomor (reset)
+
+Akan logout & hapus sesi lama, lalu membuat QR baru (hanya 1 sesi aktif).
+Butuh token login app:
+
+```bash
+curl -X POST http://localhost:5000/session/reset \
+  -H "Authorization: Bearer <JWT_LOGIN_APP>"
+```
+
+Respons: `{ "status": true, "qr": "data:image/png;base64,...", "message": "Sesi baru dibuat" }`
 
 ### Kirim PDF (multipart)
 
@@ -213,8 +229,22 @@ Sesi (jangan di-commit) dibuat otomatis di folder `auth/` / volume `whatsapp_aut
 
 ---
 
-## Catatan keamanan
+## Keamanan & proteksi
 
+Endpoint sensitif (`/session/reset`, `/logout`, `/client/restart`) hanya bisa dipanggil
+oleh user yang login di aplikasi POS. Verifikasi memakai JWT yang sama dengan API utama.
+
+Konfigurasi di `.env`:
+
+| Variabel | Keterangan |
+|----------|------------|
+| `JWT_SECRET` | **Harus sama persis** dengan `JWT_SECRET` di `Api/.env`. Dipakai verifikasi token. |
+| `RESET_ALLOWED_ROLES` | Daftar role yang boleh (pisah koma). Kosongkan untuk semua user login. Default `SUPER_ADMIN,ADMIN_TOKO`. |
+
+Cara kerja: frontend mengirim `Authorization: Bearer <JWT>` saat menekan tombol Generate QR.
+Tanpa token / token invalid → `401`; role tidak diizinkan → `403`.
+
+Catatan:
 - Jaga folder `auth/` / volume `whatsapp_auth`. Siapa pun yang memilikinya bisa mengakses akun WhatsApp.
 - Jangan commit `.env` dan `auth/` (sudah masuk `.gitignore`).
-- Service ini sebaiknya tidak diekspos langsung ke internet; akses lewat reverse proxy + HTTPS.
+- `/send` & `/send-file` masih terbuka; sebaiknya akses lewat reverse proxy + HTTPS, atau proteksi tambahan bila perlu.

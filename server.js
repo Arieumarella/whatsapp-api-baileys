@@ -5,6 +5,8 @@ const cors = require('cors');
 const multer = require('multer');
 const qrcode = require('qrcode');
 const pino = require('pino');
+const fs = require('node:fs/promises');
+const jwt = require('jsonwebtoken');
 const {
     makeWASocket,
     useMultiFileAuthState,
@@ -45,8 +47,56 @@ let qrBase64 = null;
 let isReady = false;
 let sockInfo = null;
 
+// reset / single-session guards
+let isResetting = false;
+let suppressReconnect = false;
+let generation = 0;
+
+const JWT_SECRET = process.env.JWT_SECRET || '';
+const RESET_ALLOWED_ROLES = (process.env.RESET_ALLOWED_ROLES || 'SUPER_ADMIN,ADMIN_TOKO')
+    .split(',').map(s => s.trim()).filter(Boolean);
+
 function sleep(ms) {
     return new Promise(r => setTimeout(r, ms));
+}
+
+function waitForQr(timeoutMs = 20000) {
+    return new Promise((resolve, reject) => {
+        if (qrBase64) return resolve(qrBase64);
+        const timeout = setTimeout(() => {
+            clearInterval(interval);
+            reject(new Error('QR timeout'));
+        }, timeoutMs);
+        const interval = setInterval(() => {
+            if (qrBase64) {
+                clearTimeout(timeout);
+                clearInterval(interval);
+                resolve(qrBase64);
+            }
+        }, 500);
+    });
+}
+
+// Proteksi endpoint mutasi: hanya user login (JWT app POS) dengan role yang diizinkan.
+function verifyAppAuth(req, res, next) {
+    if (!JWT_SECRET) {
+        return res.status(500).json({ status: false, error: 'JWT_SECRET belum dikonfigurasi di server' });
+    }
+    const authHeader = req.headers['authorization'] || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) {
+        return res.status(401).json({ status: false, error: 'Token tidak ada' });
+    }
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (RESET_ALLOWED_ROLES.length > 0 && !RESET_ALLOWED_ROLES.includes(decoded.role)) {
+            return res.status(403).json({ status: false, error: 'Role tidak berhak melakukan aksi ini' });
+        }
+        req.user = decoded;
+        next();
+    } catch (err) {
+        return res.status(401).json({ status: false, error: 'Token tidak valid atau kedaluwarsa' });
+    }
 }
 
 function normalizeNumber(input) {
@@ -70,10 +120,11 @@ function normalizeNumber(input) {
 }
 
 async function createSocket() {
+    const myGen = ++generation;
     const authPath = process.env.BAILEYS_AUTH_PATH || './auth';
     const { state, saveCreds } = await useMultiFileAuthState(authPath);
     const { version } = await fetchLatestBaileysVersion();
-    logger.info({ authPath, version }, 'Initializing Baileys socket');
+    logger.info({ authPath, version, generation: myGen }, 'Initializing Baileys socket');
 
     sock = makeWASocket({
         version,
@@ -124,16 +175,24 @@ async function createSocket() {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const loggedOut = statusCode === DisconnectReason.loggedOut;
 
+            // Abaikan event close dari socket usang (sudah di-reset/diganti).
+            if (myGen !== generation) {
+                logger.debug({ generation: myGen, current: generation }, 'Ignoring close from stale socket');
+                return;
+            }
+
             isReady = false;
             sockInfo = null;
             logger.warn({ statusCode, loggedOut }, 'Connection closed');
 
-            if (!loggedOut) {
+            if (!loggedOut && !suppressReconnect) {
                 logger.info('Reconnecting in 5s...');
                 await sleep(5000);
-                createSocket().catch(e => logger.error({ err: e }, 'Reconnect failed'));
+                if (myGen === generation && !suppressReconnect) {
+                    createSocket().catch(e => logger.error({ err: e }, 'Reconnect failed'));
+                }
             } else {
-                logger.info('Logged out. Request /qr to generate new QR');
+                logger.info({ suppressReconnect, loggedOut }, 'No auto-reconnect');
             }
         }
     });
@@ -152,6 +211,63 @@ async function createSocket() {
 }
 
 createSocket().catch(e => logger.error({ err: e }, 'Initial socket setup failed'));
+
+// Hentikan socket lama, hapus sesi, lalu buat sesi baru (hanya 1 sesi aktif).
+async function resetSession() {
+    if (isResetting) {
+        const err = new Error('Sedang membuat sesi baru');
+        err.code = 'RESET_IN_PROGRESS';
+        throw err;
+    }
+    isResetting = true;
+    suppressReconnect = true;
+
+    try {
+        if (sock) {
+            try { sock.ev.removeAllListeners(); } catch (e) { logger.warn({ err: e }, 'removeAllListeners failed'); }
+            try { await sock.logout(); } catch (e) { logger.warn({ err: e }, 'logout during reset failed'); }
+            try { sock.end(undefined); } catch (e) { logger.warn({ err: e }, 'end during reset failed'); }
+            sock = null;
+        }
+
+        isReady = false;
+        sockInfo = null;
+        qrBase64 = null;
+
+        const authPath = process.env.BAILEYS_AUTH_PATH || './auth';
+        try {
+            await fs.rm(authPath, { recursive: true, force: true });
+            logger.info({ authPath }, 'Sesi lama dihapus');
+        } catch (e) {
+            logger.warn({ err: e, authPath }, 'Gagal menghapus folder auth');
+        }
+
+        await sleep(500);
+        suppressReconnect = false;
+
+        await createSocket();
+        const qr = await waitForQr(20000);
+        return qr;
+    } finally {
+        isResetting = false;
+    }
+}
+
+app.post('/session/reset', verifyAppAuth, async (req, res) => {
+    try {
+        const qr = await resetSession();
+        return res.json({ status: true, qr, message: 'Sesi baru dibuat' });
+    } catch (err) {
+        if (err && err.code === 'RESET_IN_PROGRESS') {
+            return res.status(409).json({ status: false, error: err.message });
+        }
+        if (err && err.message === 'QR timeout') {
+            return res.status(504).json({ status: false, error: 'QR timeout, coba lagi' });
+        }
+        logger.error({ err }, 'Reset session error');
+        return res.status(500).json({ status: false, error: err.message });
+    }
+});
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', ready: isReady, uptime: process.uptime() });
@@ -313,7 +429,7 @@ app.post('/send-file', upload.single('file'), async (req, res) => {
     }
 });
 
-app.post('/logout', async (req, res) => {
+app.post('/logout', verifyAppAuth, async (req, res) => {
     try {
         if (sock) {
             await sock.logout();
@@ -326,7 +442,7 @@ app.post('/logout', async (req, res) => {
     }
 });
 
-app.post('/client/restart', async (req, res) => {
+app.post('/client/restart', verifyAppAuth, async (req, res) => {
     try {
         if (sock) {
             try { await sock.logout(); } catch (e) { logger.warn({ err: e }, 'logout on restart failed'); }
